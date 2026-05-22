@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>코코몽의 식욕충전소 (카카오맵 상세링크 연결 버전)</title>
+    <title>코코몽 & 아로미의 소확행 지도</title>
     <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=b3c1b3d89c3faba562c87e2765978f03&libraries=services&autoload=false"></script>
     <style>
         /* 기본 여백 초기화 및 전체 크기 지정 */
@@ -51,22 +51,30 @@
             opacity: 0.9;
         }
 
-        /* 단일 탭 버튼 디자인 */
+        /* 🌟 식욕충전소와 혈당충전소 2개 탭 버튼 영역 */
         .tab-container {
             display: flex;
             background: #f1f3f5;
             padding: 5px;
+            gap: 5px;
         }
         .tab-button {
             flex: 1;
             padding: 10px 3px;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: bold;
             border: none;
             border-radius: 4px;
+            background: #fff;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        /* 활성화된 탭 스타일 */
+        .tab-button.active {
             background: #FF6B6B;
             color: #fff;
-            text-align: center;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
@@ -102,7 +110,7 @@
             height: 100%;
         }
 
-        /* 🌟 말풍선 안의 '영업시간/평점 확인' 링크 버튼 스타일 */
+        /* 말풍선 안의 상세정보 확인 링크 버튼 스타일 */
         .info-link {
             display: inline-block;
             margin-top: 8px;
@@ -126,11 +134,12 @@
         <div class="sidebar">
             <div class="title-box">
                 <h2>🐒 코코몽의 소확행 지도</h2>
-                <p>내 주변 실시간 맛집 자동 스캔</p>
+                <p>내 주변 실시간 맛집 & 카페 자동 스캔</p>
             </div>
             
             <div class="tab-container">
-                <div class="tab-button">🌭 코코몽의 식욕충전소</div>
+                <button class="tab-button active" onclick="switchCategory('FD6', this)">🌭 식욕충전소</button>
+                <button class="tab-button" onclick="switchCategory('CE7', this)">🍉 혈당충전소</button>
             </div>
 
             <ul id="cocomongList" class="cocomong-list"></ul>
@@ -144,13 +153,13 @@
         let infowindow;
         let ps; // 카카오 장소 검색 서비스 객체
         let currentMarkers = []; // 지도 위의 마커 관리 배열
-        const selectedCategory = 'FD6'; // 음식점 카테고리 고정
+        let selectedCategory = 'FD6'; // 기본 선택 카테고리 (음식점)
 
         // 카카오 지도 로드 완료 후 실행
         kakao.maps.load(function() {
             const mapContainer = document.getElementById('map'); 
             const mapOption = {
-                center: new kakao.maps.LatLng(37.566826, 126.9786567), // 기본 중심지
+                center: new kakao.maps.LatLng(37.566826, 126.9786567), // 기본 초기 중심지
                 level: 5 // 확대 레벨 5
             };
 
@@ -179,7 +188,20 @@
             kakao.maps.event.addListener(map, 'idle', searchPlacesByCategory);
         });
 
-        // 카테고리 검색 요청 함수
+        // 🌟 탭 버튼 클릭 시 카테고리를 변경하고 화면을 초기화하는 함수
+        function switchCategory(categoryCode, buttonElement) {
+            selectedCategory = categoryCode;
+
+            // 탭 버튼 스타일 전환
+            const buttons = document.querySelectorAll('.tab-button');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            buttonElement.add('active');
+
+            infowindow.close(); // 열려있던 말풍선 닫기
+            searchPlacesByCategory(); // 새 카테고리로 재검색
+        }
+
+        // 카카오 카테고리 검색 요청 함수
         function searchPlacesByCategory() {
             if (!ps) return;
             ps.categorySearch(selectedCategory, placesSearchCB, {useMapBounds:true}); 
@@ -190,7 +212,7 @@
             if (status === kakao.maps.services.Status.OK) {
                 displayPlaces(data); 
             } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
-                document.getElementById('cocomongList').innerHTML = '<li style="text-align:center; color:#999; padding:20px;">주변에 식당이 없어요. 지도를 움직여보세요!</li>';
+                document.getElementById('cocomongList').innerHTML = '<li style="text-align:center; color:#999; padding:20px;">주변에 해당하는 장소가 없어요. 지도를 움직여보세요!</li>';
                 clearMarkers();
             }
         }
@@ -201,18 +223,28 @@
             currentMarkers = [];
         }
 
+        // 🌟 현재 선택된 카테고리에 맞춰 핀 이미지를 다르게 던져주는 함수
+        function getMarkerImage(category) {
+            let imageSrc = 'image_54286e.png'; // 기본 식욕충전소는 코코몽 핀
+            
+            if (category === 'CE7') {
+                imageSrc = 'aromi.png'; // 혈당충전소(카페)는 아로미 핀!
+            }
+
+            const imageSize = new kakao.maps.Size(55, 65); 
+            const imageOption = {offset: new kakao.maps.Point(27, 65)}; 
+            return new kakao.maps.MarkerImage(imageSrc, imageSize, imageOption);
+        }
+
         // 마커와 리스트를 화면에 뿌려주는 함수
         function displayPlaces(places) {
-            clearMarkers(); 
+            clearMarkers(); // 이전 마커 싹 지우기
             
             const listEl = document.getElementById('cocomongList');
             listEl.innerHTML = ''; 
 
-            // 코코몽 사진 마커 설정
-            const imageSrc = 'image_54286e.png'; 
-            const imageSize = new kakao.maps.Size(55, 65); 
-            const imageOption = {offset: new kakao.maps.Point(27, 65)}; 
-            const markerImage = new kakao.maps.MarkerImage(imageSrc, imageSize, imageOption);
+            // 현재 카테고리에 맞는 마커 이미지 가져오기 (코코몽 or 아로미)
+            const markerImage = getMarkerImage(selectedCategory);
 
             places.forEach(function(place) {
                 const markerPosition = new kakao.maps.LatLng(place.y, place.x);
@@ -233,15 +265,12 @@
                     <div class="place-address">${place.road_address_name ? place.road_address_name : place.address_name}</div>
                 `;
 
-                // 🌟 마커나 리스트 클릭 시 작동하는 상세 말풍선 함수
+                // 마커나 리스트 클릭 시 상세 말풍선 작동
                 function moveToPlace() {
                     map.setCenter(markerPosition);
                     
-                    // 전화번호가 없을 경우를 대비한 예외 처리
                     const phoneText = place.phone ? place.phone : '전화번호 정보 없음';
 
-                    // 🔗 핵심 변경점: place.place_url 주소를 <a> 태그에 넣어 링크를 연결합니다.
-                    // target="_blank"를 넣어서 클릭하면 새 창으로 깔끔하게 열리도록 했습니다!
                     const content = `
                         <div style="padding:15px; font-size:12px; width:240px; line-height: 1.6;">
                             <strong style="color: #FF6B6B; font-size: 14px; display:block; margin-bottom:4px;">${place.place_name}</strong>
